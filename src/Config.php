@@ -1,0 +1,119 @@
+<?php
+namespace Fasty;
+
+class Config
+{
+    const FILE = __DIR__ . '/../../etc/config.php';
+
+    private static array $data = [];
+    private static $isLoaded = false;
+
+    public function __construct()
+    {
+        // Load the default configuration file
+        $this->load();
+        // Merge with local configuration if available
+        //$this->loadLocal();
+    }
+
+    /**
+     * Load configuration data from a file.
+     *
+     * @param string $file Path to the configuration file.
+     * @return array The loaded configuration data.
+     * @throws \RuntimeException If the file does not exist or cannot be loaded.
+     */
+    public static function load(?string $file = null): array
+    {
+        $file = $file ?? self::FILE;
+
+        if (!file_exists($file)) {
+            throw new \RuntimeException("Config file not found: " . $file);
+        }
+        $data = require $file;
+
+        $localData = @include ($file . '.local.php') ?: []; // Load local config if exists
+        if (is_array($localData)) {
+            $data = array_replace_recursive($data, $localData);
+        }
+
+        if (!is_array($data)) {
+            throw new \RuntimeException("Config file must return an array: " . $file);
+        }
+
+        self::$data = array_merge(self::$data, $data);
+
+        self::$isLoaded = true;
+
+        return self::$data;
+    }
+
+    /**
+     * Get a configuration value by key.
+     *
+     * This method allows you to retrieve a configuration value using a dot notation key.
+     * For example, if the configuration is structured as ['database' => ['host' => 'localhost']],
+     * you can retrieve the host with Config::get('database.host').
+     *
+     * @param string $key The configuration key in dot notation.
+     * @param mixed $default The default value to return if the key does not exist.
+     * @return mixed The configuration value or the default value if not found.
+     */
+    public static function get(string $key, $default = null)
+    {
+        if (!self::$isLoaded) {
+            // Load the default configuration file if not already loaded
+            self::load();
+            self::$isLoaded = true;
+        }
+
+        $parts = explode('.', $key);
+        $value = self::$data;
+        foreach ($parts as $part) {
+            if (isset($value[$part])) {
+                $value = $value[$part];
+            } else {
+                return $default;
+            }
+        }
+        return $value;
+    }
+
+    /**
+     * Set a configuration value by key.
+     *
+     * @param string $key The configuration key.
+     * @param mixed $value The value to set.
+     */
+    public static function set(string $key, $value): void
+    {
+        $parts = explode('.', $key);
+        $data = &self::$data;
+        
+        foreach ($parts as $i => $part) {
+            if ($i === count($parts) - 1) {
+                $data[$part] = $value;
+            } else {
+                if (!isset($data[$part]) || !is_array($data[$part])) {
+                    $data[$part] = [];
+                }
+                $data = &$data[$part];
+            }
+        }
+        
+    }
+
+    public static function all(): array
+    {
+        return static::$data;
+    }
+
+    /**
+     * Clear the configuration data.
+     */
+    public static function clear(): void
+    {
+        static::$data = [];
+    }
+
+}
